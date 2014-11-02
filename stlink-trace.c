@@ -30,6 +30,7 @@
 #include "stdio.h"
 #include "libusb-1.0/libusb.h"
 #include <getopt.h>
+#include <signal.h>
 
 libusb_context* ctx = 0;
 libusb_device_handle* stlinkhandle = 0;
@@ -49,6 +50,7 @@ ssize_t TransferData(int terminate,
          unsigned char* receiveBuffer, size_t receiveLength);
 int FetchTraceByteCount();
 void EnterDebugState();
+void ExitDebugState();
 int ReadTraceData(int toscreen, int byteCount);
 void RunCore();
 void StepCore();
@@ -70,6 +72,12 @@ uint32_t ReadDHCSRValue();
 FILE* resultsFile = NULL;
 FILE* fullResultsFile = NULL;
 int debugEnabled = 0;
+volatile int canRun = 1;
+
+void endit(int sig)
+{
+	canRun = 0;
+}
 
 int main(int argc, char** argv)
 {
@@ -118,6 +126,8 @@ int main(int argc, char** argv)
     	 printf("Unable to locate an ST-Link V2 device.\n");
     	 exit(-1);
      }
+
+     signal(SIGINT,endit);
 
      // open ST-Link V2 adapter
      ret = libusb_open(stlinkdev, &stlinkhandle);
@@ -194,7 +204,8 @@ int main(int argc, char** argv)
      RunCore();
 
      unsigned char checkCount = 0;
-     while (1) {
+     while (canRun)
+     {
     	 usleep(100);
 
 		 unsigned int byteCount = FetchTraceByteCount();
@@ -244,7 +255,8 @@ int main(int argc, char** argv)
 		 }
      }
 
-     //============================ will not get here, but if the code is ever changed to exit the loop, it should clean up below.
+	ResetCore();
+	ExitDebugState();
 
      ret = libusb_release_interface(stlinkhandle, 0);
      if (ret != 0) {
@@ -518,6 +530,15 @@ void EnterDebugState()
 	unsigned char txBuffer[] = {STLINK_DEBUG_COMMAND, 0x35, 0xF0, 0xED, 0x00, 0xE0, 0x03, 0x00, 0x5F, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 	unsigned char rxBuffer[100];
 	SendAndReceive(&txBuffer[0], 16, &rxBuffer[0], 64);
+}
+
+void ExitDebugState()
+{
+	Write32Bit(0xe000edf0 , 0xa05f0000);
+
+	unsigned char txBuffer[] = {STLINK_DEBUG_COMMAND, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	unsigned char rxBuffer[100];
+	SendAndReceive(&txBuffer[0], 16, 0, 0);
 }
 
 void ResetCore()
