@@ -251,7 +251,7 @@ int main(int argc, char** argv)
 		 if (checkCount++ > 4) {
 			 checkCount = 0;
 			 unsigned int value = ReadDHCSRValue();
-			 printf("DHCSR = 0x%04x\n", value);
+// 			 printf("DHCSR = 0x%04x\n", value);
 		 }
      }
 
@@ -453,9 +453,8 @@ void EnableTrace()
 	// Enable all trace ports in ITM_TER
 	Write32Bit(0xE0000E00, 0xFFFFFFFF);
 
-	// Enable trace ports 31:24 in ITM_TPR
-	//Write32Bit(0xE0000E40, 0x00000008);
-	Write32Bit(0xE0000E40, 0x0000000F);		// 8 was wrong?
+	// Enable unprivileged access to trace ports 31:0 in ITM_TPR
+	Write32Bit(0xE0000E40, 0x0000000F);
 
 	// Set DWT_CTRL flags)
 	Write32Bit(0xE0000E40, 0x400003FE);		// Keil one
