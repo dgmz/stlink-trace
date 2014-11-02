@@ -15,13 +15,6 @@
 #define HEXDUMP 0
 #define ASYNC	0
 
-// for the STM32F107Z, system clock is 72MHz
-// (CLK/SWO_CLK) - 1 = (72MHz/2MHz) - 1 = 35 = 0x23
-#define CLOCK_DIVISOR 0x00000023
-// for the STM32F207Z, system clock is 120MHz
-// (CLK/SWO_CLK) - 1 = (120MHz/2MHz) - 1 = 59 = 0x3B
-//#define CLOCK_DIVISOR 0x0000003B
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -73,6 +66,7 @@ FILE* resultsFile = NULL;
 FILE* fullResultsFile = NULL;
 int debugEnabled = 0;
 volatile int canRun = 1;
+uint16_t divisor = 0;;
 
 void endit(int sig)
 {
@@ -85,7 +79,7 @@ int main(int argc, char** argv)
      char* filename = "trace.txt";
      char* fullTraceFilename = "trace-full.txt";
 
-     while ((opt = getopt(argc, argv, "f:t:d")) != -1) {
+     while ((opt = getopt(argc, argv, "f:t:c:d")) != -1) {
     	 switch (opt) {
     	 case 'd':
     		 debugEnabled = 1;
@@ -96,6 +90,9 @@ int main(int argc, char** argv)
     	 case 'f':
     		 fullTraceFilename = optarg;
     		 break;
+         case 'c':
+            divisor = (atoi(optarg)/2)-1;
+			break;
     	 }
      }
 
@@ -435,8 +432,9 @@ void EnableTrace()
 	// Set TPIU_CSPSR to enable trace port width of 2
 	Write32Bit(0xE0040004, 0x00000001);
 
+	if (divisor)
 	// Set TPIU_ACPR clock divisor
-	Write32Bit(0xE0040010, CLOCK_DIVISOR);
+	Write32Bit(0xE0040010, divisor);
 
 	// Set TPIU_SPPR to Asynchronous SWO (NRZ)
 	Write32Bit(0xE00400F0, 0x00000002);
