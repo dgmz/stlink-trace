@@ -445,8 +445,11 @@ void EnableTrace()
 	// Unlock the ITM registers for write
 	Write32Bit(0xE0000FB0, 0xC5ACCE55);
 
-	// Set ITM_TCR flags : ITMENA,SYNCENA,DWTENA, ATB=0
-	Write32Bit(0xE0000E80, 0x0001000D);
+	// Set sync counter
+	Write32Bit(0xE0000E90, 0x00000400);
+
+	// Set ITM_TCR flags : ITMENA,TSENA ATB=0
+	Write32Bit(0xE0000E80, 0x00010003);
 
 	// Enable all trace ports in ITM_TER
 	Write32Bit(0xE0000E00, 0xFFFFFFFF);
@@ -675,13 +678,13 @@ int FetchTraceByteCount()
 }
 
 // for trace
-uint8_t trace_offset = 1;
+uint8_t trace_offset = 0;
 
 int ReadTraceData(int toscreen, int rxSize)
 {
 	if (debugEnabled) printf("Reading %d bytes\n", (int)rxSize);
 
-    unsigned char rxBuffer[2050];
+    static unsigned char rxBuffer[2050];
     int bytesRead = 0;
 
 #if ASYNC
@@ -689,7 +692,7 @@ int ReadTraceData(int toscreen, int rxSize)
             responseTransfer,
             stlinkhandle,
             3 | LIBUSB_ENDPOINT_IN,
-            (unsigned char*) &rxBuffer,
+            rxBuffer+trace_offset,
             rxSize,
             NULL,
             NULL,
@@ -699,8 +702,7 @@ int ReadTraceData(int toscreen, int rxSize)
     if (submit_wait(responseTransfer)) return;
 
     // have trace data - display it
-    bytesRead = responseTransfer->actual_length;
-    printf("Read response of %d bytes\n", bytesRead);
+    bytesRead = responseTransfer->actual_length+trace_offset;
 #else
     int ret = 0;
     int totalBytes = rxSize;
@@ -710,11 +712,10 @@ int ReadTraceData(int toscreen, int rxSize)
 		ret = libusb_bulk_transfer(
 					 stlinkhandle,
 					 3 | LIBUSB_ENDPOINT_IN,
-					 rxBuffer,
+					 rxBuffer+trace_offset,
 					 totalBytes,
 					 &bytesRead,
 					 0);
-		printf("Read response %d of %d bytes. ret = %d\n", bytesRead, rxSize, ret);
 		if (bytesRead != rxSize) {
 			printf("\n\n>>>>>>>>>>>>>>>>> Not read all trace data. <<<<<<<<<<<<<<<<<<<<\n\n");
 		}
@@ -749,28 +750,59 @@ int ReadTraceData(int toscreen, int rxSize)
 			while (pos < bytesRead) {
 				// assume 1 byte trace for now - only because this is what we are testing with!
 				//packetSize = rxBuffer[pos];	// 1, 2 or 4 bytes
-				ch = rxBuffer[pos];
+				ch = rxBuffer[pos+trace_offset];
 				if (fullResultsFile != NULL) fprintf(fullResultsFile, "%c",ch);
-				pos += 2;
+				pos++;
 			}
 
 			pos = 0;
+			bytesRead += trace_offset;
 			trace_offset = 0;
-			if (rxBuffer[0] == 0x01) {
-				trace_offset = 1;
-			}
-			while (pos < bytesRead-trace_offset) {
+
+			while (pos < bytesRead) {
 				// assume 1 byte trace for now - only because this is what we are testing with!
 				//packetSize = rxBuffer[pos];	// 1, 2 or 4 bytes
-				ch = rxBuffer[pos+trace_offset];
-				if (toscreen) {
-					printf("%c",((ch < 31) | (ch > 127)) ? '.' : ch);
+				ch = rxBuffer[pos++];
+
+				if (pos < bytesRead)
+				{
+					if (ch == 1)
+					{
+						ch = rxBuffer[pos++];
+						if (toscreen) {
+							printf("%c",((ch < 31) | (ch > 127)) && ch != 10 && ch != 13 ? '.' : ch);
+						}
+						if (resultsFile != NULL) fprintf(resultsFile, "%c",ch);
+					}
+					else if (!(ch & 0x0f) && (ch & 0x70) != 0)
+					{
+						int posHold;
+
+						posHold = pos;
+						while (pos < bytesRead && (ch & 0x80))
+							ch = rxBuffer[pos++];
+
+						// Not enough in the buffer for a full one
+						if (ch & 0x80)
+						{
+							pos = posHold - 1;
+							posHold = 0;
+							while (pos < bytesRead)
+								rxBuffer[posHold++] = rxBuffer[pos++];
+
+							trace_offset = posHold;
+						}
+					}
+					else if (ch == 0)
+						pos++;
 				}
-				if (resultsFile != NULL) fprintf(resultsFile, "%c",ch);
-				pos += 2;
+				else
+				{
+					rxBuffer[0] = ch;
+					trace_offset = 1;
+				}
 			}
 
-			//trace_offset = ((bytesRead+trace_offset) & 0x01);
 			if (resultsFile != NULL) fflush(resultsFile);
 			if (fullResultsFile != NULL) fflush(fullResultsFile);
 		}
