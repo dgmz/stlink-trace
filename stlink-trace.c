@@ -108,7 +108,8 @@ int main(int argc, char** argv)
      }
 
      // turn debug messages on - full logging
-     libusb_set_debug(ctx, DEBUG_LEVEL);
+//     libusb_set_debug(ctx, DEBUG_LEVEL);
+     libusb_set_option(ctx, LIBUSB_OPTION_LOG_LEVEL, DEBUG_LEVEL);
 
      // enumerate the USB devices
      listSize = libusb_get_device_list(ctx, &deviceList);
