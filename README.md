@@ -1,7 +1,7 @@
 stlink-trace
 ============
 
-ST-Link V2 ITM trace utility
+ST-Link V2 ITM trace utility.
 
 This utility can be used with an ST-Link V2 JTAG device connected to an STM32Fxxx series microcontroller to capture the ITM data sent via the printf port (ITM stimulus port 0).
 
@@ -20,9 +20,11 @@ There is now a very simple makefile to make building a little easier from the co
 
 Build
 -----
-Eclipse project files can be used. Alternatively use the following:
+From the command line, isue the following command:
 
-gcc stlink-trace.c -lusb-1.0 -L/usr/local/lib -o stlink-trace
+```
+make
+```
 
 TODO
 ----
